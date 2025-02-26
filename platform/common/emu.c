@@ -250,14 +250,6 @@ static const char *find_msu(const char *cd_fname)
 	char *ext = strrchr(cd_fname, '.');
 	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
 	strcpy(static_buff, cd_fname);
-	static_buff[extpos++] = '.';
-	for (i = 0; i < ARRAY_SIZE(md_exts); i++) {
-		strcpy(static_buff+extpos, md_exts[i]);
-		if (access(static_buff, R_OK) == 0) {
-			printf("found MSU rom: %s\n",static_buff);
-			return static_buff;
-		}
-	}
 	return NULL;
 }
 
