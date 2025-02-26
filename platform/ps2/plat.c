@@ -75,12 +75,18 @@ void plat_early_init(void) {
 #endif
 }
 
+
 /* base directory for configuration and save files */
 int plat_get_root_dir(char *dst, int len)
-{
- 	getcwd(dst, len);
-    // We need to append / at the end
-    strcat(dst, "/");
+
+{	
+    strcpy(dst, "mc0:/PICO/");
+    DIR *dir;
+    if ((dir = opendir(dst))) 
+        closedir(dir);
+    else
+        mkdir(dst,0777);
+
     return strlen(dst);
 }
 
@@ -88,7 +94,7 @@ int plat_get_root_dir(char *dst, int len)
 int plat_get_skin_dir(char *dst, int len)
 {
 	if (len > 5)
-		strcpy(dst, "skin/");
+		strcpy(dst, "cdfs:/skin/");
 	else if (len > 0)
 		*dst = 0;
 	return strlen(dst);
@@ -97,8 +103,11 @@ int plat_get_skin_dir(char *dst, int len)
 /* top directory for rom images */
 int plat_get_data_dir(char *dst, int len)
 {
-    getcwd(dst, len);
-    return strlen(dst);
+    if (len > 5)
+		strcpy(dst, "cdfs:/ROMS/");
+	else if (len > 0)
+		*dst = 0;
+	return strlen(dst);
 }
 
 /* check if path is a directory */
