@@ -240,7 +240,7 @@ static const char *find_bios(int *region, const char *cd_fname)
 		return NULL;
 	}
 }
-
+/*
 static const char *find_msu(const char *cd_fname)
 {
 	int i;
@@ -260,7 +260,7 @@ static const char *find_msu(const char *cd_fname)
 	}
 	return NULL;
 }
-
+*/
 /* check if the name begins with BIOS name */
 /*
 static int emu_isBios(const char *name)
@@ -485,7 +485,7 @@ int emu_reload_rom(const char *rom_fname_in)
 	emu_make_path(carthw_path, "carthw.cfg", sizeof(carthw_path));
 
 	media_type = PicoLoadMedia(rom_fname, NULL, 0, carthw_path,
-			find_bios, find_msu, do_region_override);
+			find_bios, do_region_override);
 
 	switch (media_type) {
 	case PM_BAD_DETECT:
