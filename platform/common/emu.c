@@ -485,7 +485,7 @@ int emu_reload_rom(const char *rom_fname_in)
 	emu_make_path(carthw_path, "carthw.cfg", sizeof(carthw_path));
 
 	media_type = PicoLoadMedia(rom_fname, NULL, 0, carthw_path,
-			find_bios, do_region_override);
+			find_bios);
 
 	switch (media_type) {
 	case PM_BAD_DETECT:
