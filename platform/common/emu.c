@@ -247,7 +247,7 @@ static const char *find_msu(const char *cd_fname)
 
 	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
 	static const char *md_exts[] = { "gen", "smd", "md", "32x" };
-	char *ext = strrchr(cd_fname, '.');
+	char *ext = strrchr(cd_fname, 'CHD');
 	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
 	strcpy(static_buff, cd_fname);
 	static_buff[extpos++] = '.';
