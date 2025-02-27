@@ -16,7 +16,6 @@
 #include <gsToolkit.h>
 #include <gsInline.h>
 #include <audsrv.h>
-#include <common/mp3.h>
 
 #include "in_ps2.h"
 #include "../libpicofe/input.h"
@@ -24,6 +23,7 @@
 #include "../libpicofe/menu.h"
 #include "../common/input_pico.h"
 #include "../common/emu.h"
+#include "../common/mp3.h"
 #include "../common/keyboard.h"
 
 #include <pico/pico_int.h>
