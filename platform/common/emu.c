@@ -243,15 +243,7 @@ static const char *find_bios(int *region, const char *cd_fname)
 
 static const char *find_msu(const char *cd_fname)
 
-{	int i;
- 
-		for (i = index; i >= 0; i--)
-    		if (cdd.toc.tracks[i].fd != NULL)
-      		break;
- 		 // TODO: this doesn't cover all tracks being in a single bin file properly:
-  		// in that case, fd should be duplicated to work properly with this MD+ shit.
-  		if (! is_audio(i)) return;
-	/*
+{	
 	int i;
 
 	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
@@ -268,8 +260,8 @@ static const char *find_msu(const char *cd_fname)
 			return static_buff;
 		}
 	}
- */
-	//return NULL;
+
+	return NULL;
 }
 
 /* check if the name begins with BIOS name */
