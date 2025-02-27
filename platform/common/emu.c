@@ -244,7 +244,7 @@ static const char *find_bios(int *region, const char *cd_fname)
 static const char *find_msu(const char *cd_fname)
 
 {	
-	int i;
+	//int i;
 
 	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
 	//static const char *md_exts[] = { "gen", "smd", "md", "32x" };
@@ -252,7 +252,7 @@ static const char *find_msu(const char *cd_fname)
 	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
 	strcpy(static_buff, cd_fname);
 	static_buff[extpos++] = '.';
-
+/*
 	for (i = 0; i < ARRAY_SIZE(md_exts); i++) {
 		strcpy(static_buff+extpos, md_exts[i]);
 		if (access(static_buff, R_OK) == 0) {
@@ -260,7 +260,7 @@ static const char *find_msu(const char *cd_fname)
 			return static_buff;
 		}
 	}
-
+*/
 	return NULL;
 }
 
