@@ -244,11 +244,10 @@ static const char *find_bios(int *region, const char *cd_fname)
 static const char *find_msu(const char *cd_fname)
 
 {
+	int i;
 
 	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
-	static const char *md_exts[] = { "gen", "smd", "md", "32x" };
-	cd_type = PicoCdCheck(fname, NULL);
-	ret = cdd_load(fname, cd_type);
+	//static const char *md_exts[] = { "gen", "smd", "md", "32x" };
 	char *ext = strrchr(cd_fname, '.');
 	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
 	strcpy(static_buff, cd_fname);
