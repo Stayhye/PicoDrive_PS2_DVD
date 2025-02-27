@@ -561,8 +561,8 @@ static int PsndRender(int offset, int length)
       && (!(Pico_mcd->s68k_regs[0x36] & 1) || Pico_msd.state == 3))
   {
     if (Pico_mcd->cdda_type == CT_MP3)
-      mp3_update(buf32, length-offset, stereo);
-    else
+     // mp3_update(buf32, length-offset, stereo);
+    //else
       cdda_raw_update(buf32, length-offset, stereo);
   }
 
