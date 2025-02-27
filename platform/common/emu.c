@@ -259,7 +259,7 @@ static const char *find_msu(const char *cd_fname)
 			return static_buff;
 		}
 	} */
-	return NULL;
+	return static_buff;
 }
 
 /* check if the name begins with BIOS name */
