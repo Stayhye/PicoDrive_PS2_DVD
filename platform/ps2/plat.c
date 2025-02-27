@@ -24,6 +24,7 @@
 #include <ps2_joystick_driver.h>
 #include <ps2_audio_driver.h>
 
+#include "../common/mp3.h"
 #include "../libpicofe/plat.h"
 
 static int sound_rates[] = { 11025, 22050, 44100, -1 };
@@ -73,6 +74,12 @@ void plat_early_init(void) {
 #if defined(LOG_TO_FILE)
 	log_init();
 #endif
+}
+
+int fd = fioOpen("cdfs:/1.MP3", O_RDONLY);
+if (fd < 0) {
+    // Handle error
+    return -1;
 }
 
 
