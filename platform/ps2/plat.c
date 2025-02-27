@@ -76,13 +76,6 @@ void plat_early_init(void) {
 #endif
 }
 
-}
-int fd = fopen("cdfs:/1.MP3");
-	if (fd < 0) {
-    	// Handle error
-   	 return -1;
-	}
-}
 
 /* base directory for configuration and save files */
 int plat_get_root_dir(char *dst, int len)
