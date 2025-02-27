@@ -243,6 +243,28 @@ static const char *find_bios(int *region, const char *cd_fname)
 
 static const char *find_msu(const char *cd_fname)
 
+{
+
+	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
+	static const char *md_exts[] = { "gen", "smd", "md", "32x" };
+	cd_type = PicoCdCheck(fname, NULL);
+	ret = cdd_load(fname, cd_type);
+	char *ext = strrchr(cd_fname, '.');
+	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
+	strcpy(static_buff, cd_fname);
+	static_buff[extpos++] = '.';
+/*	
+	for (i = 0; i < ARRAY_SIZE(md_exts); i++) {
+		strcpy(static_buff+extpos, md_exts[i]);
+		if (access(static_buff, R_OK) == 0) {
+			printf("found MSU rom: %s\n",static_buff);
+			return static_buff;
+		}
+	}
+ */
+	return NULL;
+}
+
 /* check if the name begins with BIOS name */
 /*
 static int emu_isBios(const char *name)
