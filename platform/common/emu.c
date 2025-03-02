@@ -243,7 +243,7 @@ static const char *find_bios(int *region, const char *cd_fname)
 		return NULL;
 	}
 }
-
+/*
 static const char *find_msu(const char *cd_fname)
 {
 	int i;
