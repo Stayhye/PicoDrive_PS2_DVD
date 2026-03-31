@@ -103,7 +103,7 @@ int plat_get_skin_dir(char *dst, int len)
 int plat_get_data_dir(char *dst, int len)
 {
     if (len > 5)
-		strcpy(dst, "cdfs:/ROMS/");
+		strcpy(dst, "cdfs:/ROMS/ROMS_GENS/");
 	else if (len > 0)
 		*dst = 0;
 	return strlen(dst);
