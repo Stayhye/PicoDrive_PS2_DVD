@@ -210,22 +210,22 @@ static const char *find_bios(int *region, const char *cd_fname)
 	for (i = 0; i < count; i++)
 	{
 		emu_make_path(static_buff, files[i], sizeof(static_buff) - 4);
-		strcat(static_buff, ".bin");
+		strcat(static_buff, ".BIN");
 		f = fopen(static_buff, "rb");
 		if (f) break;
 
 		static_buff[strlen(static_buff) - 4] = 0;
-		strcat(static_buff, ".zip");
+		strcat(static_buff, ".ZIP");
 		f = fopen(static_buff, "rb");
 		if (f) break;
 
 		strcpy(static_buff, files[i]);
-		strcat(static_buff, ".bin");
+		strcat(static_buff, ".BIN");
 		f = fopen(static_buff, "rb");
 		if (f) break;
 
 		static_buff[strlen(static_buff) - 4] = 0;
-		strcat(static_buff, ".zip");
+		strcat(static_buff, ".ZIP");
 		f = fopen(static_buff, "rb");
 		if (f) break;
 	}
