@@ -167,13 +167,13 @@ void emu_status_msg(const char *format, ...)
 }
 
 static const char * const biosfiles_us[] = {
-	"us_scd2_9306", "SegaCDBIOS9303", "us_scd1_9210", "bios_CD_U"
+	"USA"
 };
 static const char * const biosfiles_eu[] = {
-	"eu_mcd2_9306", "eu_mcd2_9303", "eu_mcd1_9210", "bios_CD_E"
+	"EUR"
 };
 static const char * const biosfiles_jp[] = {
-	"jp_mcd2_921222", "jp_mcd1_9112", "jp_mcd1_9111", "bios_CD_J"
+	"JAP"
 };
 
 static const char *find_bios(int *region, const char *cd_fname)
@@ -243,15 +243,17 @@ static const char *find_bios(int *region, const char *cd_fname)
 }
 
 static const char *find_msu(const char *cd_fname)
-{
-	int i;
+
+{	
+	//int i;
 
 	// look for MSU.MD or MD+ rom file. XXX another extension list? ugh...
-	static const char *md_exts[] = { "gen", "smd", "md", "32x" };
+	//static const char *md_exts[] = { "gen", "smd", "md", "32x" };
 	char *ext = strrchr(cd_fname, '.');
 	int extpos = ext ? ext-cd_fname : strlen(cd_fname);
 	strcpy(static_buff, cd_fname);
 	static_buff[extpos++] = '.';
+/*
 	for (i = 0; i < ARRAY_SIZE(md_exts); i++) {
 		strcpy(static_buff+extpos, md_exts[i]);
 		if (access(static_buff, R_OK) == 0) {
@@ -259,6 +261,7 @@ static const char *find_msu(const char *cd_fname)
 			return static_buff;
 		}
 	}
+*/
 	return NULL;
 }
 
