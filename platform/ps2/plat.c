@@ -93,7 +93,7 @@ int plat_get_root_dir(char *dst, int len)
 int plat_get_skin_dir(char *dst, int len)
 {
 	if (len > 5)
-		strcpy(dst, "cdfs:/skin/");
+		strcpy(dst, "cdfs:/IN/");
 	else if (len > 0)
 		*dst = 0;
 	return strlen(dst);
