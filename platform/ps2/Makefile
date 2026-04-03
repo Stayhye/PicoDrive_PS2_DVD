@@ -18,5 +18,10 @@ PicoDrive.elf: ../../picodrive
 	$(STRIP) $^ -o $@
 
 rel: PicoDrive.elf readme.txt ../game_def.cfg
+	mkdir -p out/PicoDrive/skin/ out/bin_to_cso_mp3
+	cp $^ out/PicoDrive/
+	#cp ../../skin/* out/PicoDrive/skin/
+	#mkdir -p out/bin_to_cso_mp3
+	#cp ../../tools/bin_to_cso_mp3/* out/bin_to_cso_mp3/
 	cd out && zip -9 -r ../../../PicoDrive_ps2_$(VER).zip *
 	rm -rf out
