@@ -167,13 +167,13 @@ void emu_status_msg(const char *format, ...)
 }
 
 static const char * const biosfiles_us[] = {
-	"USA.BIN"
+	"USA"
 };
 static const char * const biosfiles_eu[] = {
-	"EUR.BIN"
+	"EUR"
 };
 static const char * const biosfiles_jp[] = {
-	"JAP.BIN"
+	"JAP"
 };
 
 static const char *find_bios(int *region, const char *cd_fname)
