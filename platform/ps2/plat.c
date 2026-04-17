@@ -26,6 +26,9 @@
 
 #include "../libpicofe/plat.h"
 
+/* Global pointer reference for thread initialization */
+extern void *_gp;
+
 /* BGM Control Globals */
 static int bgm_running = 0;
 static int bgm_tid = -1;
@@ -53,18 +56,25 @@ static void bgm_thread_func(void *arg) {
 /* External Hooks for main.c */
 void plat_start_bgm(void) {
     if (bgm_running) return;
+    
+    ee_thread_t thread;
+    memset(&thread, 0, sizeof(ee_thread_t));
+
     bgm_running = 1;
 
-    ee_thread_t thread = {
-        .func = bgm_thread_func,
-        .stack = bgm_stack,
-        .stack_size = sizeof(bgm_stack),
-        .initial_priority = 80,
-        .gp_reg = &_gp
-    };
+    thread.func = (void *)bgm_thread_func;
+    thread.stack = bgm_stack;
+    thread.stack_size = sizeof(bgm_stack);
+    thread.initial_priority = 80;
+    thread.gp_reg = &_gp;
 
     bgm_tid = CreateThread(&thread);
-    if (bgm_tid >= 0) StartThread(bgm_tid, NULL);
+    if (bgm_tid >= 0) {
+        StartThread(bgm_tid, NULL);
+    } else {
+        bgm_running = 0;
+        printf("BGM: Failed to create thread\n");
+    }
 }
 
 void plat_stop_bgm(void) {
@@ -117,4 +127,4 @@ void plat_early_init(void) {
 #endif
 }
 
-/* ... keep the rest of your original plat_get_ticks, etc. functions below ... */
+/* ... Keep all your original functions (plat_get_ticks, ticks_us, ticks_ms, etc) here ... */
