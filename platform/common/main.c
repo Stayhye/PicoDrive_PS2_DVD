@@ -1,206 +1,171 @@
 /*
- * PicoDrive platform interface for PS2
- * (Modified for High Performance WAV Streaming)
+ * PicoDrive
+ * (C) notaz, 2006-2010
+ *
+ * This work is licensed under the terms of MAME license.
+ * See COPYING file in the top-level directory.
  */
 
 #include <stdio.h>
-#include <stdarg.h>
-#include <sys/types.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/time.h>
 #include <stdlib.h>
-#include <malloc.h>
-#include <errno.h>
-
-#include <kernel.h>
-#include <iopcontrol.h>
-#include <sbv_patches.h>
-#include <sifrpc.h>
-#include <loadfile.h>
-#include <ps2_filesystem_driver.h>
-#include <ps2_joystick_driver.h>
-#include <ps2_audio_driver.h>
-#include <audsrv.h>
-
-/* Fix for the ALIGNED redefinition warning */
-#ifdef ALIGNED
-#undef ALIGNED
+#include <string.h>
+#include <strings.h>
+#ifdef USE_SDL
+#include <SDL.h>
 #endif
+
+#include "../libpicofe/input.h"
 #include "../libpicofe/plat.h"
+#include "menu_pico.h"
+#include "emu.h"
+#include "version.h"
+#include <cpu/debug.h>
 
-/* Embedded IRX Symbols */
-extern unsigned char audsrv_irx[];
-extern unsigned int size_audsrv_irx;
-extern unsigned char libsd_irx[];
-extern unsigned int size_libsd_irx;
+/* Background Music Hooks */
+extern void plat_start_bgm(void);
+extern void plat_stop_bgm(void);
 
-extern void *_gp;
+static int load_state_slot = -1;
+char **g_argv;
 
-static int bgm_running = 0;
-static int bgm_tid = -1;
-static unsigned char bgm_stack[0x4000] __attribute__((aligned(16)));
+void parse_cmd_line(int argc, char *argv[])
+{
+    int x, unrecognized = 0;
 
-static int sound_rates[] = { 11025, 22050, 44100, -1 };
-struct plat_target plat_target = { .sound_rates = sound_rates };
-
-static void bgm_thread_func(void *arg) {
-    FILE *f = fopen("menu.wav", "rb");
-    if (!f) f = fopen("MENU.WAV", "rb");
-    if (!f) f = fopen("cdfs:/MENU.WAV;1", "rb");
-    
-    if (!f) {
-        bgm_tid = -1;
-        ExitDeleteThread();
-        return;
-    }
-
-    fseek(f, 44, SEEK_SET); 
-    static char audio_buf[16384];
-
-    while (bgm_running) {
-        int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
-        if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET); 
-            continue;
+    for (x = 1; x < argc && !unrecognized; x++)
+    {
+        if (argv[x][0] == '-')
+        {
+            if (strcasecmp(argv[x], "-config") == 0) {
+                if (x+1 < argc) { ++x; PicoConfigFile = argv[x]; }
+            }
+            else if (strcasecmp(argv[x], "-loadstate") == 0
+                 || strcasecmp(argv[x], "-load") == 0)
+            {
+                if (x+1 < argc) { ++x; load_state_slot = atoi(argv[x]); }
+            }
+            else if (strcasecmp(argv[x], "-pdb") == 0) {
+                if (x+1 < argc) { ++x; pdb_command(argv[x]); }
+            }
+            else if (strcasecmp(argv[x], "-pdb_connect") == 0) {
+                if (x+2 < argc) { pdb_net_connect(argv[x+1], argv[x+2]); x += 2; }
+            }
+            else {
+                unrecognized = plat_parse_arg(argc, argv, &x);
+            }
+        } else {
+            FILE *f = fopen(argv[x], "rb");
+            if (f) {
+                fclose(f);
+                rom_fname_reload = argv[x];
+            }
+            else
+                unrecognized = 1;
+            break;
         }
-
-        /* Regulate speed by waiting for the audio hardware to be ready */
-        audsrv_wait_audio(bytes_read);
-        audsrv_play_audio(audio_buf, bytes_read);
-
-        /* Yield briefly to keep the system responsive */
-        usleep(1000);
     }
 
-    fclose(f);
-    bgm_tid = -1;
-    ExitDeleteThread();
-}
-
-void plat_start_bgm(void) {
-    if (bgm_running) return;
-    
-    ee_thread_t thread;
-    memset(&thread, 0, sizeof(ee_thread_t));
-    bgm_running = 1;
-
-    thread.func = (void *)bgm_thread_func;
-    thread.stack = bgm_stack;
-    thread.stack_size = sizeof(bgm_stack);
-    thread.initial_priority = 100; 
-    thread.gp_reg = &_gp;
-
-    bgm_tid = CreateThread(&thread);
-    if (bgm_tid >= 0) {
-        StartThread(bgm_tid, NULL);
-    } else {
-        bgm_running = 0;
+    if (unrecognized) {
+        printf("\n\n\nPicoDrive v" VERSION " (c) notaz, 2006-2009,2013\n");
+        printf("usage: %s [options] [romfile]\n", argv[0]);
+        printf("options:\n"
+            " -config <file>    use specified config file instead of default 'config.cfg'\n"
+            " -loadstate <num>  if ROM is specified, try loading savestate slot <num>\n");
+        exit(1);
     }
 }
 
-void plat_stop_bgm(void) {
-    if (!bgm_running) return;
-    bgm_running = 0;
-    
-    int timeout = 1000; 
-    while (bgm_tid != -1 && timeout-- > 0) {
-        usleep(100);
-    }
-}
+int main(int argc, char *argv[])
+{
+    g_argv = argv;
 
-static void reset_IOP() {
-    SifInitRpc(0);
-#if !defined(DEBUG) || defined(BUILD_FOR_PCSX2)
-    while (!SifIopReset(NULL, 0)) {};
+    plat_early_init();
+
+    in_init();
+    //in_probe();
+
+    plat_target_init();
+    if (argc > 1)
+        parse_cmd_line(argc, argv);
+
+    plat_init();
+    menu_init();
+
+    emu_prep_defconfig(); // depends on input
+    emu_read_config(NULL, 0);
+
+    emu_init();
+
+    engineState = rom_fname_reload ? PGS_ReloadRom : PGS_Menu;
+    plat_video_menu_enter(0);
+
+    if (engineState == PGS_ReloadRom)
+    {
+        plat_video_menu_begin();
+        if (emu_reload_rom(rom_fname_reload)) {
+            engineState = PGS_Running;
+            if (load_state_slot >= 0) {
+                state_slot = load_state_slot;
+                emu_save_load_game(1, 0);
+            }
+        }
+        plat_video_menu_end();
+    }
+    plat_video_menu_leave();
+
+    for (;;)
+    {
+        switch (engineState)
+        {
+            case PGS_Menu:
+                plat_start_bgm();
+                menu_loop();
+                break;
+
+            case PGS_TrayMenu:
+                menu_loop_tray();
+                break;
+
+            case PGS_ReloadRom:
+                plat_stop_bgm();
+                if (emu_reload_rom(rom_fname_reload))
+                    engineState = PGS_Running;
+                else {
+                    printf("PGS_ReloadRom == 0\n");
+                    engineState = PGS_Menu;
+                }
+                break;
+
+            case PGS_RestartRun:
+                plat_stop_bgm();
+                engineState = PGS_Running;
+                /* vvv fallthrough */
+
+            case PGS_Running:
+#ifdef GPERF
+                ProfilerStart("gperf.out");
 #endif
-    while (!SifIopSync()) {};
-    SifInitRpc(0);
-    sbv_patch_enable_lmb();
-    sbv_patch_disable_prefix_check();
-}
+                emu_loop();
+#ifdef GPERF
+                ProfilerStop();
+#endif
+                break;
 
-int plat_target_init(void) { return 0; }
+            case PGS_Quit:
+                plat_stop_bgm();
+                goto endloop;
 
-void plat_target_finish(void) {
-    plat_stop_bgm();
-    audsrv_quit();
-    deinit_ps2_filesystem_driver();
-}
-
-int plat_parse_arg(int argc, char *argv[], int *x) { return 1; }
-
-void plat_early_init(void) {
-    reset_IOP();
-    init_ps2_filesystem_driver();
-
-    int ret;
-    SifExecModuleBuffer(libsd_irx, size_libsd_irx, 0, NULL, &ret);
-    SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
-    
-    if (audsrv_init() != 0) {
-        printf("audsrv: failed to initialize\n");
-    } else {
-        audsrv_set_volume(MAX_VOLUME); 
+            default:
+                printf("engine got into unknown state (%i), exitting\n", engineState);
+                goto endloop;
+        }
     }
-}
 
-int plat_get_root_dir(char *dst, int len) {    
-    strncpy(dst, "mc0:/PICO/", (size_t)len);
-    DIR *dir;
-    if ((dir = opendir(dst))) closedir(dir);
-    else mkdir(dst, 0777);
-    return (int)strlen(dst);
-}
+    endloop:
 
-int plat_get_skin_dir(char *dst, int len) {
-    if (len > 5) strcpy(dst, "cdfs:/SKIN/");
-    else if (len > 0) *dst = 0;
-    return (int)strlen(dst);
-}
+    emu_finish();
+    plat_finish();
+    plat_target_finish();
 
-int plat_get_data_dir(char *dst, int len) {
-    if (len > 5) strcpy(dst, "cdfs:/ROMS/");
-    else if (len > 0) *dst = 0;
-    return (int)strlen(dst);
-}
-
-int plat_is_dir(const char *path) {
-    DIR *dir;
-    if ((dir = opendir(path))) { closedir(dir); return 1; }
     return 0;
 }
-
-unsigned int plat_get_ticks_ms(void) { return (unsigned int)(clock() / 1000); }
-unsigned int plat_get_ticks_us(void) { return (unsigned int)clock(); }
-void plat_wait_till_us(unsigned int us_to) {
-    unsigned int ticks = (unsigned int)clock();
-    if (us_to > ticks) usleep(us_to - ticks);
-}
-void plat_sleep_ms(int ms) { usleep((unsigned int)ms * 1000); }
-int plat_wait_event(int *fds_hnds, int count, int timeout_ms) { return 0; }
-
-void *plat_mmap(unsigned long addr, size_t size, int need_exec, int is_fixed) { return malloc(size); }
-void *plat_mremap(void *ptr, size_t oldsize, size_t newsize) { return realloc(ptr, newsize); }
-void plat_munmap(void *ptr, size_t size) { free(ptr); }
-void *plat_mem_get_for_drc(size_t size) { return NULL; }
-int plat_mem_set_exec(void *ptr, size_t size) { return 0; }
-
-int _flush_cache (char *addr, const int size, const int op) { 
-    FlushCache(0); FlushCache(2); return 0;
-}
-
-int posix_memalign(void **p, size_t align, size_t size) {
-    void *ptr = memalign(align, size);
-    if (!ptr) return ENOMEM;
-    *p = ptr;
-    return 0;
-}
-
-void lprintf(const char *fmt, ...) {
-    va_list vl; va_start(vl, fmt);
-    vprintf(fmt, vl); va_end(vl);
-}
-
-void plat_debug_cat(char *str) {}
