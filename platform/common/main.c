@@ -91,9 +91,6 @@ int main(int argc, char *argv[])
     plat_init();
     menu_init();
 
-    /* Start the background music for the menu */
-    plat_start_bgm();
-
     emu_prep_defconfig(); // depends on input
     emu_read_config(NULL, 0);
 
@@ -121,6 +118,7 @@ int main(int argc, char *argv[])
         switch (engineState)
         {
             case PGS_Menu:
+                plat_start_bgm(); // Restart/Start music when entering menu
                 menu_loop();
                 break;
 
@@ -129,6 +127,7 @@ int main(int argc, char *argv[])
                 break;
 
             case PGS_ReloadRom:
+                plat_stop_bgm(); // Stop music before loading/reloading a ROM
                 if (emu_reload_rom(rom_fname_reload))
                     engineState = PGS_Running;
                 else {
@@ -138,20 +137,23 @@ int main(int argc, char *argv[])
                 break;
 
             case PGS_RestartRun:
+                plat_stop_bgm(); // Ensure music is stopped for restart
                 engineState = PGS_Running;
                 /* vvv fallthrough */
 
             case PGS_Running:
 #ifdef GPERF
-    ProfilerStart("gperf.out");
+                ProfilerStart("gperf.out");
 #endif
                 emu_loop();
 #ifdef GPERF
-    ProfilerStop();
+                ProfilerStop();
 #endif
+                // After emu_loop exits, the state machine will cycle back to PGS_Menu
                 break;
 
             case PGS_Quit:
+                plat_stop_bgm();
                 goto endloop;
 
             default:
