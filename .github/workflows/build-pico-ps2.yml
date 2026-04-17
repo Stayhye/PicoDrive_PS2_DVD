@@ -24,27 +24,27 @@ jobs:
 
     - name: Bundle IRX Drivers and Music
       run: |
-        # Find the release directory created by the previous step
-        # It usually looks like PicoDrive_ps2_vers
-        RELEASE_DIR=$(ls -d PicoDrive_ps2_*)
+        # Identify the zip file
+        ZIP_FILE=$(ls PicoDrive_ps2_*.zip)
+        # Identify the folder name (everything before .zip)
+        DIR_NAME="${ZIP_FILE%.zip}"
         
-        # Create IRX folder inside the release directory
-        mkdir -p "$RELEASE_DIR/irx"
+        # Unzip the existing artifact
+        unzip "$ZIP_FILE"
         
-        # Copy drivers from the SDK
-        cp $PS2SDK/iop/irx/audsrv.irx "$RELEASE_DIR/irx/"
-        cp $PS2SDK/iop/irx/libsd.irx "$RELEASE_DIR/irx/"
+        # Create IRX folder and copy drivers
+        mkdir -p "$DIR_NAME/irx"
+        cp $PS2SDK/iop/irx/audsrv.irx "$DIR_NAME/irx/"
+        cp $PS2SDK/iop/irx/libsd.irx "$DIR_NAME/irx/"
         
-        # Copy your menu music (ensure menu.mp3 is in your repo root)
-        # If it's in a folder like 'resources', change to cp resources/menu.mp3 ...
-        if [ -f "menu.mp3" ]; then
-          cp menu.mp3 "$RELEASE_DIR/"
-        else
-          echo "Warning: menu.mp3 not found in root, music will not play!"
+        # Copy your music (assumes menu.wav is in repo root)
+        if [ -f "menu.wav" ]; then
+          cp menu.wav "$DIR_NAME/"
         fi
         
-        # Re-zip the folder with the new files
-        zip -r "${RELEASE_DIR}.zip" "$RELEASE_DIR"
+        # Remove old zip and create new one
+        rm "$ZIP_FILE"
+        zip -r "$ZIP_FILE" "$DIR_NAME"
 
     - name: artifacts
       uses: actions/upload-artifact@v4
