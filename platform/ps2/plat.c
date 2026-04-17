@@ -25,12 +25,13 @@
 #include <audsrv.h>
 #include <libcdvd.h>
 
-/* Fix for the ALIGNED redefinition warning */
+/* Kill the warning for ALIGNED by ensuring it is undefined before the port header */
 #ifdef ALIGNED
 #undef ALIGNED
 #endif
 #include "../libpicofe/plat.h"
 
+/* Embedded IRX Symbols */
 extern unsigned char audsrv_irx[];
 extern unsigned int size_audsrv_irx;
 extern unsigned char libsd_irx[];
@@ -40,7 +41,7 @@ extern void *_gp;
 
 static int bgm_running = 0;
 static int bgm_tid = -1;
-static unsigned char bgm_stack[0x8000] __attribute__((aligned(16)));
+static unsigned char bgm_stack[0x4000] __attribute__((aligned(16)));
 
 static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
@@ -56,18 +57,12 @@ static void bgm_thread_func(void *arg) {
         return;
     }
 
-    /* Parse WAV header for sample rate to fix speed */
-    unsigned char header[44];
-    if (fread(header, 1, 44, f) == 44) {
-        int sample_rate = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
-        int channels = header[22];
-        /* Use standard audsrv call for the toolchain */
-        audsrv_set_format(sample_rate, channels, 16);
-    }
-
-    static char audio_buf[16384];
+    fseek(f, 44, SEEK_SET); 
+    static char audio_buf[8192];
 
     while (bgm_running) {
+        if (!bgm_running) break;
+
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
             fseek(f, 44, SEEK_SET); 
@@ -75,8 +70,10 @@ static void bgm_thread_func(void *arg) {
         }
 
         audsrv_wait_audio(bytes_read);
-        if (!bgm_running) break;
         audsrv_play_audio(audio_buf, bytes_read);
+
+        /* Standard yield */
+        usleep(100);
     }
 
     fclose(f);
@@ -94,7 +91,7 @@ void plat_start_bgm(void) {
     thread.func = (void *)bgm_thread_func;
     thread.stack = bgm_stack;
     thread.stack_size = sizeof(bgm_stack);
-    thread.initial_priority = 60; 
+    thread.initial_priority = 100; 
     thread.gp_reg = &_gp;
 
     bgm_tid = CreateThread(&thread);
@@ -109,11 +106,14 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    int timeout = 500; 
+    int timeout = 3000; 
     while (bgm_tid != -1 && timeout-- > 0) {
-        usleep(1000);
+        /* usleep is consistently supported in this toolchain environment */
+        usleep(500);
     }
-    
+
+    /* Stop CDVD drive to prevent "Bad Sector" errors during ROM load */
+    sceCdStop();
     sceCdSync(0);
 }
 
