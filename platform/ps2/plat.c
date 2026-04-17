@@ -56,15 +56,13 @@ static void bgm_thread_func(void *arg) {
         return;
     }
 
-    /* Basic WAV header parsing to fix "Too Fast" playback */
+    /* Parse WAV header for sample rate to fix speed */
     unsigned char header[44];
     if (fread(header, 1, 44, f) == 44) {
         int sample_rate = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
         int channels = header[22];
-        int bit_depth = header[34];
-        
-        int format = (bit_depth == 16) ? AUDSRV_FORMAT_16BIT : AUDSRV_FORMAT_8BIT;
-        audsrv_set_format(sample_rate, channels, format);
+        /* Use standard audsrv call for the toolchain */
+        audsrv_set_format(sample_rate, channels, 16);
     }
 
     static char audio_buf[16384];
@@ -96,7 +94,7 @@ void plat_start_bgm(void) {
     thread.func = (void *)bgm_thread_func;
     thread.stack = bgm_stack;
     thread.stack_size = sizeof(bgm_stack);
-    thread.initial_priority = 60; // Slightly higher priority for smoother audio
+    thread.initial_priority = 60; 
     thread.gp_reg = &_gp;
 
     bgm_tid = CreateThread(&thread);
@@ -116,7 +114,6 @@ void plat_stop_bgm(void) {
         usleep(1000);
     }
     
-    /* Ensure drive is released for the ROM loader */
     sceCdSync(0);
 }
 
