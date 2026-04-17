@@ -25,8 +25,7 @@ jobs:
         mkdir -p build/irx
         cp $PS2SDK/iop/irx/audsrv.irx build/irx/
         cp $PS2SDK/iop/irx/libsd.irx build/irx/
-        # Also copy your menu music into the build folder
-        cp path/to/your/menu.mp3 build/
+       
     - name: artifacts
       uses: actions/upload-artifact@v4
       with:
