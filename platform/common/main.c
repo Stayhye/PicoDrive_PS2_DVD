@@ -14,7 +14,7 @@
 #include <SDL.h>
 #endif
 
-#include "plat_ps2.h"
+#include "platform/ps2/plat_ps2.h"
 #include "../libpicofe/input.h"
 #include "../libpicofe/plat.h"
 #include "menu_pico.h"
