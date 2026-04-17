@@ -146,14 +146,14 @@ void plat_early_init(void) {
 /* base directory for configuration and save files */
 int plat_get_root_dir(char *dst, int len)
 {    
-    strcpy(dst, "mc0:/PICO/");
+    strncpy(dst, "mc0:/PICO/", len);
     DIR *dir;
     if ((dir = opendir(dst))) 
         closedir(dir);
     else
-        mkdir(dst,0777);
+        mkdir(dst, 0777);
 
-    return strlen(dst);
+    return (int)strlen(dst);
 }
 
 /* base directory for emulator resources */
@@ -247,7 +247,6 @@ int plat_mem_set_exec(void *ptr, size_t size)
 
 int _flush_cache (char *addr, const int size, const int op)
 { 
-    // Using immediate values to avoid redefinition issues
     FlushCache(0); // WRITEBACK_DCACHE
     FlushCache(2); // INVALIDATE_ICACHE
     return 0;
