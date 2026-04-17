@@ -102,6 +102,7 @@ int main(int argc, char *argv[])
     if (engineState == PGS_ReloadRom)
     {
         plat_video_menu_begin();
+        plat_stop_bgm(); // Stop music before any ROM access
         if (emu_reload_rom(rom_fname_reload)) {
             engineState = PGS_Running;
             if (load_state_slot >= 0) {
@@ -127,7 +128,7 @@ int main(int argc, char *argv[])
                 break;
 
             case PGS_ReloadRom:
-                plat_stop_bgm();
+                plat_stop_bgm(); // Ensure drive is idle
                 if (emu_reload_rom(rom_fname_reload))
                     engineState = PGS_Running;
                 else {
