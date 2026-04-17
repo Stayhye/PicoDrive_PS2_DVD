@@ -102,7 +102,6 @@ int main(int argc, char *argv[])
     if (engineState == PGS_ReloadRom)
     {
         plat_video_menu_begin();
-        plat_stop_bgm(); // Stop music before any filesystem access
         if (emu_reload_rom(rom_fname_reload)) {
             engineState = PGS_Running;
             if (load_state_slot >= 0) {
@@ -128,11 +127,11 @@ int main(int argc, char *argv[])
                 break;
 
             case PGS_ReloadRom:
-                plat_stop_bgm(); // Ensure drive is free for ROM loading
+                plat_stop_bgm();
                 if (emu_reload_rom(rom_fname_reload))
                     engineState = PGS_Running;
                 else {
-                    printf("PGS_ReloadRom fail\n");
+                    printf("PGS_ReloadRom == 0\n");
                     engineState = PGS_Menu;
                 }
                 break;
@@ -143,7 +142,13 @@ int main(int argc, char *argv[])
                 /* vvv fallthrough */
 
             case PGS_Running:
+#ifdef GPERF
+                ProfilerStart("gperf.out");
+#endif
                 emu_loop();
+#ifdef GPERF
+                ProfilerStop();
+#endif
                 break;
 
             case PGS_Quit:
@@ -151,6 +156,7 @@ int main(int argc, char *argv[])
                 goto endloop;
 
             default:
+                printf("engine got into unknown state (%i), exitting\n", engineState);
                 goto endloop;
         }
     }
