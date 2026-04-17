@@ -26,16 +26,14 @@
 
 #include "../libpicofe/plat.h"
 
-/* Embedded IRX Symbols (from bin2c) */
+/* Embedded IRX Symbols */
 extern unsigned char audsrv_irx[];
 extern unsigned int size_audsrv_irx;
 extern unsigned char libsd_irx[];
 extern unsigned int size_libsd_irx;
 
-/* Global pointer reference */
 extern void *_gp;
 
-/* BGM Control Globals */
 static int bgm_running = 0;
 static int bgm_tid = -1;
 static unsigned char bgm_stack[0x2000] __attribute__((aligned(16)));
@@ -43,22 +41,25 @@ static unsigned char bgm_stack[0x2000] __attribute__((aligned(16)));
 static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
-/* BGM Background Thread - Streaming WAV */
 static void bgm_thread_func(void *arg) {
+    // Try Uppercase first (ISO standard)
     FILE *f = fopen("cdfs:/MENU.WAV;1", "rb");
+    if (!f) f = fopen("cdfs:/menu.wav;1", "rb");
+    
     if (!f) {
+        printf("BGM: Could not open menu.wav\n");
         bgm_tid = -1;
         ExitDeleteThread();
         return;
     }
 
-    fseek(f, 44, SEEK_SET); // Skip WAV header
-    static char audio_buf[4096];
+    fseek(f, 44, SEEK_SET); 
+    static char audio_buf[8192]; // Larger buffer for stability
 
     while (bgm_running) {
         int bytes_read = fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET); // Loop
+            fseek(f, 44, SEEK_SET);
             continue;
         }
 
@@ -125,131 +126,72 @@ void plat_early_init(void) {
     reset_IOP();
     init_ps2_filesystem_driver();
 
-    /* Load Embedded Modules from EE RAM Buffer */
     int ret;
     SifExecModuleBuffer(libsd_irx, size_libsd_irx, 0, NULL, &ret);
     SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
     
     if (audsrv_init() != 0) {
         printf("audsrv: failed to initialize\n");
+    } else {
+        // Set maximum volume for both channels
+        audsrv_set_volume(MAX_VOLUME); 
     }
 }
 
-/* base directory for configuration and save files */
-int plat_get_root_dir(char *dst, int len)
-{    
+int plat_get_root_dir(char *dst, int len) {    
     strncpy(dst, "mc0:/PICO/", (size_t)len);
     DIR *dir;
-    if ((dir = opendir(dst))) 
-        closedir(dir);
-    else
-        mkdir(dst, 0777);
-
+    if ((dir = opendir(dst))) closedir(dir);
+    else mkdir(dst, 0777);
     return (int)strlen(dst);
 }
 
-/* base directory for emulator resources */
-int plat_get_skin_dir(char *dst, int len)
-{
-    if (len > 5)
-        strcpy(dst, "cdfs:/SKIN/");
-    else if (len > 0)
-        *dst = 0;
+int plat_get_skin_dir(char *dst, int len) {
+    if (len > 5) strcpy(dst, "cdfs:/SKIN/");
+    else if (len > 0) *dst = 0;
     return (int)strlen(dst);
 }
 
-/* top directory for rom images */
-int plat_get_data_dir(char *dst, int len)
-{
-    if (len > 5)
-        strcpy(dst, "cdfs:/ROMS/");
-    else if (len > 0)
-        *dst = 0;
+int plat_get_data_dir(char *dst, int len) {
+    if (len > 5) strcpy(dst, "cdfs:/ROMS/");
+    else if (len > 0) *dst = 0;
     return (int)strlen(dst);
 }
 
-int plat_is_dir(const char *path)
-{
+int plat_is_dir(const char *path) {
     DIR *dir;
-    if ((dir = opendir(path))) {
-        closedir(dir);
-        return 1;
-    }
+    if ((dir = opendir(path))) { closedir(dir); return 1; }
     return 0;
 }
 
-unsigned int plat_get_ticks_ms(void)
-{
-    return (unsigned int)(clock() / 1000);
-}
-
-unsigned int plat_get_ticks_us(void)
-{
-    return (unsigned int)clock();
-}
-
-void plat_wait_till_us(unsigned int us_to)
-{
+unsigned int plat_get_ticks_ms(void) { return (unsigned int)(clock() / 1000); }
+unsigned int plat_get_ticks_us(void) { return (unsigned int)clock(); }
+void plat_wait_till_us(unsigned int us_to) {
     unsigned int ticks = (unsigned int)clock();
-    if (us_to > ticks)
-        usleep(us_to - ticks);
+    if (us_to > ticks) usleep(us_to - ticks);
+}
+void plat_sleep_ms(int ms) { usleep((unsigned int)ms * 1000); }
+int plat_wait_event(int *fds_hnds, int count, int timeout_ms) { return 0; }
+
+void *plat_mmap(unsigned long addr, size_t size, int need_exec, int is_fixed) { return malloc(size); }
+void *plat_mremap(void *ptr, size_t oldsize, size_t newsize) { return realloc(ptr, newsize); }
+void plat_munmap(void *ptr, size_t size) { free(ptr); }
+void *plat_mem_get_for_drc(size_t size) { return NULL; }
+int plat_mem_set_exec(void *ptr, size_t size) { return 0; }
+
+int _flush_cache (char *addr, const int size, const int op) { 
+    FlushCache(0); FlushCache(2); return 0;
 }
 
-void plat_sleep_ms(int ms)
-{
-    usleep((unsigned int)ms * 1000);
-}
-
-int plat_wait_event(int *fds_hnds, int count, int timeout_ms)
-{
-    return 0;
-}
-
-void *plat_mmap(unsigned long addr, size_t size, int need_exec, int is_fixed)
-{
-    return malloc(size);
-}
-
-void *plat_mremap(void *ptr, size_t oldsize, size_t newsize)
-{
-    return realloc(ptr, newsize);
-}
-
-void plat_munmap(void *ptr, size_t size)
-{
-    free(ptr);
-}
-
-void *plat_mem_get_for_drc(size_t size)
-{
-    return NULL;
-}
-
-int plat_mem_set_exec(void *ptr, size_t size)
-{
-    return 0;
-}
-
-int _flush_cache (char *addr, const int size, const int op)
-{ 
-    FlushCache(0); // WRITEBACK_DCACHE
-    FlushCache(2); // INVALIDATE_ICACHE
-    return 0;
-}
-
-int posix_memalign(void **p, size_t align, size_t size)
-{
+int posix_memalign(void **p, size_t align, size_t size) {
     if (p == (void **)NULL) return EINVAL;
     *p = memalign(align, size);
     return (*p ? 0 : ENOMEM);
 }
 
-void lprintf(const char *fmt, ...)
-{
-    va_list vl;
-    va_start(vl, fmt);
-    vprintf(fmt, vl);
-    va_end(vl);
+void lprintf(const char *fmt, ...) {
+    va_list vl; va_start(vl, fmt);
+    vprintf(fmt, vl); va_end(vl);
 }
 
 void plat_debug_cat(char *str) {}
