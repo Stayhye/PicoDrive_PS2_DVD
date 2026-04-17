@@ -24,6 +24,9 @@
 #include <ps2_audio_driver.h>
 #include <audsrv.h>
 
+/* For CDVD status and stopping */
+#include <libcdvd.h>
+
 /* Fix for the ALIGNED redefinition warning */
 #ifdef ALIGNED
 #undef ALIGNED
@@ -57,21 +60,25 @@ static void bgm_thread_func(void *arg) {
     }
 
     fseek(f, 44, SEEK_SET); 
-    static char audio_buf[16384];
+    /* Reduced buffer to 8KB to allow quicker exit signal checks */
+    static char audio_buf[8192];
 
     while (bgm_running) {
+        /* Check if we need to stop before hitting the drive */
+        if (!bgm_running) break;
+
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
             fseek(f, 44, SEEK_SET); 
             continue;
         }
 
-        /* Regulate speed by waiting for the audio hardware to be ready */
+        /* Regulate speed */
         audsrv_wait_audio(bytes_read);
         audsrv_play_audio(audio_buf, bytes_read);
 
-        /* Yield briefly to keep the system responsive */
-        usleep(1000);
+        /* Minor yield */
+        usleep(100);
     }
 
     fclose(f);
@@ -104,10 +111,16 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    int timeout = 1000; 
+    /* Explicitly wait for the thread to close the file and exit */
+    int timeout = 3000; 
     while (bgm_tid != -1 && timeout-- > 0) {
-        usleep(100);
+        /* Use DelayThread for better kernel context switching */
+        DelayThread(500);
     }
+
+    /* Force the CDVD drive to stop any pending seeks/reads */
+    sceCdStop();
+    sceCdSync(0);
 }
 
 static void reset_IOP() {
