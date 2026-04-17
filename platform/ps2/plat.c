@@ -146,7 +146,7 @@ void plat_early_init(void) {
 /* base directory for configuration and save files */
 int plat_get_root_dir(char *dst, int len)
 {    
-    strncpy(dst, "mc0:/PICO/", len);
+    strncpy(dst, "mc0:/PICO/", (size_t)len);
     DIR *dir;
     if ((dir = opendir(dst))) 
         closedir(dir);
@@ -210,7 +210,7 @@ void plat_wait_till_us(unsigned int us_to)
 /* sleep for some time in ms */
 void plat_sleep_ms(int ms)
 {
-    usleep(ms * 1000);
+    usleep((unsigned int)ms * 1000);
 }
 
 /* wait until some event occurs, or timeout */
@@ -254,7 +254,7 @@ int _flush_cache (char *addr, const int size, const int op)
 
 int posix_memalign(void **p, size_t align, size_t size)
 {
-    if (!p) return EINVAL;
+    if (p == (void **)NULL) return EINVAL;
     *p = memalign(align, size);
     return (*p ? 0 : ENOMEM);
 }
