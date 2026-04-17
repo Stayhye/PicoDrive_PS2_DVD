@@ -57,25 +57,20 @@ static void bgm_thread_func(void *arg) {
     }
 
     fseek(f, 44, SEEK_SET); 
-    
-    /* 16KB buffer - balanced for disc speed */
     static char audio_buf[16384];
 
     while (bgm_running) {
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET); // Loop
+            fseek(f, 44, SEEK_SET); 
             continue;
         }
 
-        /* This is the standard way to sync. It blocks the thread 
-           until the IOP has room for 'bytes_read', naturally 
-           regulating the playback speed to the wav's bitrate.
-        */
+        /* Regulate speed by waiting for the audio hardware to be ready */
         audsrv_wait_audio(bytes_read);
         audsrv_play_audio(audio_buf, bytes_read);
 
-        /* Minor sleep to yield some CPU back to the main thread/loader */
+        /* Yield briefly to keep the system responsive */
         usleep(1000);
     }
 
@@ -94,7 +89,6 @@ void plat_start_bgm(void) {
     thread.func = (void *)bgm_thread_func;
     thread.stack = bgm_stack;
     thread.stack_size = sizeof(bgm_stack);
-    /* Priority 100 ensures music doesn't choke the ROM loader */
     thread.initial_priority = 100; 
     thread.gp_reg = &_gp;
 
@@ -124,4 +118,89 @@ static void reset_IOP() {
     while (!SifIopSync()) {};
     SifInitRpc(0);
     sbv_patch_enable_lmb();
-    sbv_patch_disable_
+    sbv_patch_disable_prefix_check();
+}
+
+int plat_target_init(void) { return 0; }
+
+void plat_target_finish(void) {
+    plat_stop_bgm();
+    audsrv_quit();
+    deinit_ps2_filesystem_driver();
+}
+
+int plat_parse_arg(int argc, char *argv[], int *x) { return 1; }
+
+void plat_early_init(void) {
+    reset_IOP();
+    init_ps2_filesystem_driver();
+
+    int ret;
+    SifExecModuleBuffer(libsd_irx, size_libsd_irx, 0, NULL, &ret);
+    SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, &ret);
+    
+    if (audsrv_init() != 0) {
+        printf("audsrv: failed to initialize\n");
+    } else {
+        audsrv_set_volume(MAX_VOLUME); 
+    }
+}
+
+int plat_get_root_dir(char *dst, int len) {    
+    strncpy(dst, "mc0:/PICO/", (size_t)len);
+    DIR *dir;
+    if ((dir = opendir(dst))) closedir(dir);
+    else mkdir(dst, 0777);
+    return (int)strlen(dst);
+}
+
+int plat_get_skin_dir(char *dst, int len) {
+    if (len > 5) strcpy(dst, "cdfs:/SKIN/");
+    else if (len > 0) *dst = 0;
+    return (int)strlen(dst);
+}
+
+int plat_get_data_dir(char *dst, int len) {
+    if (len > 5) strcpy(dst, "cdfs:/ROMS/");
+    else if (len > 0) *dst = 0;
+    return (int)strlen(dst);
+}
+
+int plat_is_dir(const char *path) {
+    DIR *dir;
+    if ((dir = opendir(path))) { closedir(dir); return 1; }
+    return 0;
+}
+
+unsigned int plat_get_ticks_ms(void) { return (unsigned int)(clock() / 1000); }
+unsigned int plat_get_ticks_us(void) { return (unsigned int)clock(); }
+void plat_wait_till_us(unsigned int us_to) {
+    unsigned int ticks = (unsigned int)clock();
+    if (us_to > ticks) usleep(us_to - ticks);
+}
+void plat_sleep_ms(int ms) { usleep((unsigned int)ms * 1000); }
+int plat_wait_event(int *fds_hnds, int count, int timeout_ms) { return 0; }
+
+void *plat_mmap(unsigned long addr, size_t size, int need_exec, int is_fixed) { return malloc(size); }
+void *plat_mremap(void *ptr, size_t oldsize, size_t newsize) { return realloc(ptr, newsize); }
+void plat_munmap(void *ptr, size_t size) { free(ptr); }
+void *plat_mem_get_for_drc(size_t size) { return NULL; }
+int plat_mem_set_exec(void *ptr, size_t size) { return 0; }
+
+int _flush_cache (char *addr, const int size, const int op) { 
+    FlushCache(0); FlushCache(2); return 0;
+}
+
+int posix_memalign(void **p, size_t align, size_t size) {
+    void *ptr = memalign(align, size);
+    if (!ptr) return ENOMEM;
+    *p = ptr;
+    return 0;
+}
+
+void lprintf(const char *fmt, ...) {
+    va_list vl; va_start(vl, fmt);
+    vprintf(fmt, vl); va_end(vl);
+}
+
+void plat_debug_cat(char *str) {}
