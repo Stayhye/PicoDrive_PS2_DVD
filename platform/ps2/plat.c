@@ -46,7 +46,7 @@ static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    /* Delay start for 2 seconds to ensure menu stability before disk streaming */
+    /* 2-second delay to let menu stabilize and icons load */
     usleep(2000000); 
 
     FILE *f = fopen("menu.wav", "rb");
@@ -61,15 +61,21 @@ static void bgm_thread_func(void *arg) {
 
     /* Parse WAV header to correct playback speed */
     unsigned char header[44];
-    int sample_rate = 44100;
-    int channels = 2;
+    struct audsrv_fmt_t wav_fmt;
+    
+    // Default values
+    wav_fmt.bits = 16;
+    wav_fmt.freq = 44100;
+    wav_fmt.channels = 2;
+
     if (fread(header, 1, 44, f) == 44) {
-        sample_rate = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
-        channels = header[22];
+        wav_fmt.freq = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
+        wav_fmt.channels = header[22];
+        wav_fmt.bits = header[34];
     }
     
-    /* Use hex 0x10 for 16-bit to avoid constant errors across SDK versions */
-    audsrv_set_format(sample_rate, channels, 0x10);
+    /* Correct struct-based configuration for audsrv */
+    audsrv_set_format(&wav_fmt);
 
     static char audio_buf[16384];
 
@@ -117,13 +123,13 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Give thread time to clean up disk handles */
+    /* Fast timeout for responsive loading */
     int timeout = 500; 
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(1000);
     }
     
-    /* Sync drive state */
+    /* Ensure drive is free */
     sceCdSync(0);
 }
 
