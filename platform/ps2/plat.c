@@ -24,6 +24,10 @@
 #include <ps2_audio_driver.h>
 #include <audsrv.h>
 
+/* Fix for the ALIGNED redefinition warning */
+#ifdef ALIGNED
+#undef ALIGNED
+#endif
 #include "../libpicofe/plat.h"
 
 /* Embedded IRX Symbols */
@@ -53,25 +57,21 @@ static void bgm_thread_func(void *arg) {
     }
 
     fseek(f, 44, SEEK_SET); 
-    
-    /* 16KB buffer for smooth streaming */
     static char audio_buf[16384];
 
     while (bgm_running) {
-        /* If audsrv is too full, sleep briefly to save CPU for the loader */
-        if (audsrv_queued_remaining() > 32768) {
-            usleep(10000); 
-            continue;
-        }
-
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET); // Loop
+            fseek(f, 44, SEEK_SET); 
             continue;
         }
 
+        /* Regulate speed by waiting for the audio hardware to be ready */
         audsrv_wait_audio(bytes_read);
         audsrv_play_audio(audio_buf, bytes_read);
+
+        /* Yield briefly to keep the system responsive */
+        usleep(1000);
     }
 
     fclose(f);
@@ -89,7 +89,6 @@ void plat_start_bgm(void) {
     thread.func = (void *)bgm_thread_func;
     thread.stack = bgm_stack;
     thread.stack_size = sizeof(bgm_stack);
-    /* Priority 100 (Lower priority than Main Menu) avoids slow loading */
     thread.initial_priority = 100; 
     thread.gp_reg = &_gp;
 
@@ -105,7 +104,6 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Wait for thread to exit so we don't have overlapping audio */
     int timeout = 1000; 
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(100);
