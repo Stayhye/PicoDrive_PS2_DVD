@@ -1,172 +1,127 @@
 /*
- * PicoDrive
- * (C) notaz, 2006-2010
- *
- * This work is licensed under the terms of MAME license.
- * See COPYING file in the top-level directory.
+ * PicoDrive platform interface for PS2
+ * (Modified for High Performance WAV Streaming)
  */
 
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdarg.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <string.h>
-#include <strings.h>
-#ifdef USE_SDL
-#include <SDL.h>
-#endif
+#include <sys/time.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <errno.h>
 
-#include "../libpicofe/input.h"
+#include <kernel.h>
+#include <iopcontrol.h>
+#include <sbv_patches.h>
+#include <sifrpc.h>
+#include <loadfile.h>
+#include <ps2_filesystem_driver.h>
+#include <ps2_joystick_driver.h>
+#include <ps2_audio_driver.h>
+#include <audsrv.h>
+
+/* Fix for the ALIGNED redefinition warning */
+#ifdef ALIGNED
+#undef ALIGNED
+#endif
 #include "../libpicofe/plat.h"
-#include "menu_pico.h"
-#include "emu.h"
-#include "version.h"
-#include <cpu/debug.h>
 
-/* Background Music Hooks */
-extern void plat_start_bgm(void);
-extern void plat_stop_bgm(void);
+/* Embedded IRX Symbols */
+extern unsigned char audsrv_irx[];
+extern unsigned int size_audsrv_irx;
+extern unsigned char libsd_irx[];
+extern unsigned int size_libsd_irx;
 
-static int load_state_slot = -1;
-char **g_argv;
+extern void *_gp;
 
-void parse_cmd_line(int argc, char *argv[])
-{
-    int x, unrecognized = 0;
+static int bgm_running = 0;
+static int bgm_tid = -1;
+static unsigned char bgm_stack[0x4000] __attribute__((aligned(16)));
 
-    for (x = 1; x < argc && !unrecognized; x++)
-    {
-        if (argv[x][0] == '-')
-        {
-            if (strcasecmp(argv[x], "-config") == 0) {
-                if (x+1 < argc) { ++x; PicoConfigFile = argv[x]; }
-            }
-            else if (strcasecmp(argv[x], "-loadstate") == 0
-                 || strcasecmp(argv[x], "-load") == 0)
-            {
-                if (x+1 < argc) { ++x; load_state_slot = atoi(argv[x]); }
-            }
-            else if (strcasecmp(argv[x], "-pdb") == 0) {
-                if (x+1 < argc) { ++x; pdb_command(argv[x]); }
-            }
-            else if (strcasecmp(argv[x], "-pdb_connect") == 0) {
-                if (x+2 < argc) { pdb_net_connect(argv[x+1], argv[x+2]); x += 2; }
-            }
-            else {
-                unrecognized = plat_parse_arg(argc, argv, &x);
-            }
-        } else {
-            FILE *f = fopen(argv[x], "rb");
-            if (f) {
-                fclose(f);
-                rom_fname_reload = argv[x];
-            }
-            else
-                unrecognized = 1;
-            break;
-        }
+static int sound_rates[] = { 11025, 22050, 44100, -1 };
+struct plat_target plat_target = { .sound_rates = sound_rates };
+
+static void bgm_thread_func(void *arg) {
+    FILE *f = fopen("menu.wav", "rb");
+    if (!f) f = fopen("MENU.WAV", "rb");
+    if (!f) f = fopen("cdfs:/MENU.WAV;1", "rb");
+    
+    if (!f) {
+        bgm_tid = -1;
+        ExitDeleteThread();
+        return;
     }
 
-    if (unrecognized) {
-        printf("\n\n\nPicoDrive v" VERSION " (c) notaz, 2006-2009,2013\n");
-        printf("usage: %s [options] [romfile]\n", argv[0]);
-        printf("options:\n"
-            " -config <file>    use specified config file instead of default 'config.cfg'\n"
-            " -loadstate <num>  if ROM is specified, try loading savestate slot <num>\n");
-        exit(1);
+    fseek(f, 44, SEEK_SET); 
+    
+    /* 16KB buffer - balanced for disc speed */
+    static char audio_buf[16384];
+
+    while (bgm_running) {
+        int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
+        if (bytes_read <= 0) {
+            fseek(f, 44, SEEK_SET); // Loop
+            continue;
+        }
+
+        /* This is the standard way to sync. It blocks the thread 
+           until the IOP has room for 'bytes_read', naturally 
+           regulating the playback speed to the wav's bitrate.
+        */
+        audsrv_wait_audio(bytes_read);
+        audsrv_play_audio(audio_buf, bytes_read);
+
+        /* Minor sleep to yield some CPU back to the main thread/loader */
+        usleep(1000);
+    }
+
+    fclose(f);
+    bgm_tid = -1;
+    ExitDeleteThread();
+}
+
+void plat_start_bgm(void) {
+    if (bgm_running) return;
+    
+    ee_thread_t thread;
+    memset(&thread, 0, sizeof(ee_thread_t));
+    bgm_running = 1;
+
+    thread.func = (void *)bgm_thread_func;
+    thread.stack = bgm_stack;
+    thread.stack_size = sizeof(bgm_stack);
+    /* Priority 100 ensures music doesn't choke the ROM loader */
+    thread.initial_priority = 100; 
+    thread.gp_reg = &_gp;
+
+    bgm_tid = CreateThread(&thread);
+    if (bgm_tid >= 0) {
+        StartThread(bgm_tid, NULL);
+    } else {
+        bgm_running = 0;
     }
 }
 
-int main(int argc, char *argv[])
-{
-    g_argv = argv;
-
-    plat_early_init();
-
-    in_init();
-    //in_probe();
-
-    plat_target_init();
-    if (argc > 1)
-        parse_cmd_line(argc, argv);
-
-    plat_init();
-    menu_init();
-
-    emu_prep_defconfig(); // depends on input
-    emu_read_config(NULL, 0);
-
-    emu_init();
-
-    engineState = rom_fname_reload ? PGS_ReloadRom : PGS_Menu;
-    plat_video_menu_enter(0);
-
-    if (engineState == PGS_ReloadRom)
-    {
-        plat_video_menu_begin();
-        if (emu_reload_rom(rom_fname_reload)) {
-            engineState = PGS_Running;
-            if (load_state_slot >= 0) {
-                state_slot = load_state_slot;
-                emu_save_load_game(1, 0);
-            }
-        }
-        plat_video_menu_end();
+void plat_stop_bgm(void) {
+    if (!bgm_running) return;
+    bgm_running = 0;
+    
+    int timeout = 1000; 
+    while (bgm_tid != -1 && timeout-- > 0) {
+        usleep(100);
     }
-    plat_video_menu_leave();
-
-    for (;;)
-    {
-        switch (engineState)
-        {
-            case PGS_Menu:
-                plat_start_bgm(); // Restart/Start music when entering menu
-                menu_loop();
-                break;
-
-            case PGS_TrayMenu:
-                menu_loop_tray();
-                break;
-
-            case PGS_ReloadRom:
-                plat_stop_bgm(); // Stop music before loading/reloading a ROM
-                if (emu_reload_rom(rom_fname_reload))
-                    engineState = PGS_Running;
-                else {
-                    printf("PGS_ReloadRom == 0\n");
-                    engineState = PGS_Menu;
-                }
-                break;
-
-            case PGS_RestartRun:
-                plat_stop_bgm(); // Ensure music is stopped for restart
-                engineState = PGS_Running;
-                /* vvv fallthrough */
-
-            case PGS_Running:
-#ifdef GPERF
-                ProfilerStart("gperf.out");
-#endif
-                emu_loop();
-#ifdef GPERF
-                ProfilerStop();
-#endif
-                // After emu_loop exits, the state machine will cycle back to PGS_Menu
-                break;
-
-            case PGS_Quit:
-                plat_stop_bgm();
-                goto endloop;
-
-            default:
-                printf("engine got into unknown state (%i), exitting\n", engineState);
-                goto endloop;
-        }
-    }
-
-    endloop:
-
-    emu_finish();
-    plat_finish();
-    plat_target_finish();
-
-    return 0;
 }
+
+static void reset_IOP() {
+    SifInitRpc(0);
+#if !defined(DEBUG) || defined(BUILD_FOR_PCSX2)
+    while (!SifIopReset(NULL, 0)) {};
+#endif
+    while (!SifIopSync()) {};
+    SifInitRpc(0);
+    sbv_patch_enable_lmb();
+    sbv_patch_disable_
