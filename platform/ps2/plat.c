@@ -46,7 +46,7 @@ static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    /* Delay to let the filesystem driver settle after boot/load */
+    /* 2 second delay to let the menu load icons/files without disk conflict */
     usleep(2000000); 
 
     FILE *f = fopen("menu.wav", "rb");
@@ -59,9 +59,9 @@ static void bgm_thread_func(void *arg) {
         return;
     }
 
+    /* Parse WAV header for correct playback speed */
     unsigned char header[44];
     struct audsrv_fmt_t wav_fmt;
-    
     wav_fmt.bits = 16;
     wav_fmt.freq = 44100;
     wav_fmt.channels = 2;
@@ -90,14 +90,12 @@ static void bgm_thread_func(void *arg) {
     }
 
     fclose(f);
-    /* Close actual CDVD handles if using CDFS */
-    sceCdSync(0);
     bgm_tid = -1;
     ExitDeleteThread();
 }
 
 void plat_start_bgm(void) {
-    if (bgm_running || bgm_tid >= 0) return;
+    if (bgm_running) return;
     
     ee_thread_t thread;
     memset(&thread, 0, sizeof(ee_thread_t));
@@ -121,14 +119,13 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Wait for thread to close file and exit */
+    /* Wait for the thread to exit and close the file handle */
     int timeout = 1000; 
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(1000);
     }
     
-    /* Force Drive to IDLE to stop Bad Sector errors */
-    sceCdStop();
+    /* Force Drive to IDLE and sync to prevent "Bad Sector" errors during ROM load */
     sceCdSync(0);
 }
 
