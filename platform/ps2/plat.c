@@ -1,6 +1,6 @@
 /*
  * PicoDrive platform interface for PS2
- * (Modified for Menu Music)
+ * (Modified for Menu Music - WAV Streamer)
  */
 
 #include <stdio.h>
@@ -43,20 +43,21 @@ static void bgm_thread_func(void *arg) {
     if (!f) {
         bgm_tid = -1;
         ExitDeleteThread();
+        return;
     }
 
     fseek(f, 44, SEEK_SET); // Skip WAV header
-    char buf[4096];
+    static char audio_buf[4096];
 
     while (bgm_running) {
-        int bytes_read = fread(buf, 1, sizeof(buf), f);
+        int bytes_read = fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
             fseek(f, 44, SEEK_SET); // Loop
             continue;
         }
 
         audsrv_wait_audio(bytes_read);
-        audsrv_play_audio(buf, bytes_read);
+        audsrv_play_audio(audio_buf, bytes_read);
     }
 
     fclose(f);
@@ -89,7 +90,7 @@ void plat_start_bgm(void) {
 
 void plat_stop_bgm(void) {
     bgm_running = 0;
-    // We wait briefly to let the thread exit gracefully
+    // Brief wait for thread cleanup
     int timeout = 100;
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(1000);
@@ -162,7 +163,7 @@ int plat_get_skin_dir(char *dst, int len)
         strcpy(dst, "cdfs:/skin/");
     else if (len > 0)
         *dst = 0;
-    return strlen(dst);
+    return (int)strlen(dst);
 }
 
 /* top directory for rom images */
@@ -172,7 +173,7 @@ int plat_get_data_dir(char *dst, int len)
         strcpy(dst, "cdfs:/ROMS/ROMS_GENS/");
     else if (len > 0)
         *dst = 0;
-    return strlen(dst);
+    return (int)strlen(dst);
 }
 
 /* check if path is a directory */
@@ -215,7 +216,7 @@ void plat_sleep_ms(int ms)
 /* wait until some event occurs, or timeout */
 int plat_wait_event(int *fds_hnds, int count, int timeout_ms)
 {
-    return 0;    // unused
+    return 0;
 }
 
 /* memory mapping functions */
@@ -246,14 +247,15 @@ int plat_mem_set_exec(void *ptr, size_t size)
 
 int _flush_cache (char *addr, const int size, const int op)
 { 
-    FlushCache(0); /* WRITEBACK_DCACHE */
-    FlushCache(2); /* INVALIDATE_ICACHE */
+    // Using immediate values to avoid redefinition issues
+    FlushCache(0); // WRITEBACK_DCACHE
+    FlushCache(2); // INVALIDATE_ICACHE
     return 0;
 }
 
 int posix_memalign(void **p, size_t align, size_t size)
 {
-    if (p == NULL) return EINVAL;
+    if (!p) return EINVAL;
     *p = memalign(align, size);
     return (*p ? 0 : ENOMEM);
 }
@@ -262,7 +264,6 @@ int posix_memalign(void **p, size_t align, size_t size)
 void lprintf(const char *fmt, ...)
 {
     va_list vl;
-
     va_start(vl, fmt);
 #if defined(LOG_TO_FILE)
     vfprintf(logFile, fmt, vl);
