@@ -71,6 +71,9 @@ void parse_cmd_line(int argc, char *argv[])
 	}
 }
 
+/* Add these lines right before the main() function */
+extern void plat_start_bgm(void);
+extern void plat_stop_bgm(void);
 
 int main(int argc, char *argv[])
 {
