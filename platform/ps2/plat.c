@@ -46,8 +46,7 @@ static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    /* 2 second delay to let the menu load icons/files without disk conflict */
-    usleep(2000000); 
+    usleep(2000000); // 2 second delay for menu stability
 
     FILE *f = fopen("menu.wav", "rb");
     if (!f) f = fopen("MENU.WAV", "rb");
@@ -59,7 +58,6 @@ static void bgm_thread_func(void *arg) {
         return;
     }
 
-    /* Parse WAV header for correct playback speed */
     unsigned char header[44];
     struct audsrv_fmt_t wav_fmt;
     wav_fmt.bits = 16;
@@ -75,7 +73,6 @@ static void bgm_thread_func(void *arg) {
     audsrv_set_format(&wav_fmt);
 
     static char audio_buf[16384];
-
     while (bgm_running) {
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
@@ -85,7 +82,6 @@ static void bgm_thread_func(void *arg) {
 
         audsrv_wait_audio(bytes_read);
         if (!bgm_running) break;
-        
         audsrv_play_audio(audio_buf, bytes_read);
     }
 
@@ -95,7 +91,7 @@ static void bgm_thread_func(void *arg) {
 }
 
 void plat_start_bgm(void) {
-    if (bgm_running) return;
+    if (bgm_running || bgm_tid >= 0) return;
     
     ee_thread_t thread;
     memset(&thread, 0, sizeof(ee_thread_t));
@@ -119,13 +115,13 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Wait for the thread to exit and close the file handle */
     int timeout = 1000; 
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(1000);
     }
     
-    /* Force Drive to IDLE and sync to prevent "Bad Sector" errors during ROM load */
+    /* Stop CDVD drive seeking to let the ROM loader work */
+    sceCdStop();
     sceCdSync(0);
 }
 
