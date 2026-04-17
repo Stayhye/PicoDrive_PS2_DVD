@@ -46,7 +46,7 @@ static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    /* 2-second delay to let menu stabilize and icons load */
+    /* Delay to let the filesystem driver settle after boot/load */
     usleep(2000000); 
 
     FILE *f = fopen("menu.wav", "rb");
@@ -59,11 +59,9 @@ static void bgm_thread_func(void *arg) {
         return;
     }
 
-    /* Parse WAV header to correct playback speed */
     unsigned char header[44];
     struct audsrv_fmt_t wav_fmt;
     
-    // Default values
     wav_fmt.bits = 16;
     wav_fmt.freq = 44100;
     wav_fmt.channels = 2;
@@ -74,7 +72,6 @@ static void bgm_thread_func(void *arg) {
         wav_fmt.bits = header[34];
     }
     
-    /* Correct struct-based configuration for audsrv */
     audsrv_set_format(&wav_fmt);
 
     static char audio_buf[16384];
@@ -86,7 +83,6 @@ static void bgm_thread_func(void *arg) {
             continue;
         }
 
-        /* Check running flag while waiting for audio hardware buffer */
         audsrv_wait_audio(bytes_read);
         if (!bgm_running) break;
         
@@ -94,12 +90,14 @@ static void bgm_thread_func(void *arg) {
     }
 
     fclose(f);
+    /* Close actual CDVD handles if using CDFS */
+    sceCdSync(0);
     bgm_tid = -1;
     ExitDeleteThread();
 }
 
 void plat_start_bgm(void) {
-    if (bgm_running) return;
+    if (bgm_running || bgm_tid >= 0) return;
     
     ee_thread_t thread;
     memset(&thread, 0, sizeof(ee_thread_t));
@@ -123,13 +121,14 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Fast timeout for responsive loading */
-    int timeout = 500; 
+    /* Wait for thread to close file and exit */
+    int timeout = 1000; 
     while (bgm_tid != -1 && timeout-- > 0) {
         usleep(1000);
     }
     
-    /* Ensure drive is free */
+    /* Force Drive to IDLE to stop Bad Sector errors */
+    sceCdStop();
     sceCdSync(0);
 }
 
