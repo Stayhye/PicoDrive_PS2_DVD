@@ -32,23 +32,34 @@ extern void *_gp;
 /* BGM Control Globals */
 static int bgm_running = 0;
 static int bgm_tid = -1;
-static unsigned char bgm_stack[0x1000] __attribute__((aligned(16)));
+static unsigned char bgm_stack[0x2000] __attribute__((aligned(16)));
 
 static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
-/* BGM Background Thread */
+/* BGM Background Thread - Streaming WAV */
 static void bgm_thread_func(void *arg) {
-    // Audsrv handles the MP3 decoding on the IOP processor
-    // Loop is set to 1 to enable automatic looping
-    audsrv_play_mp3("cdfs:/menu.mp3;1", 1);
-
-    while (bgm_running) {
-        audsrv_get_status();
-        DelayThread(100000); 
+    FILE *f = fopen("cdfs:/menu.wav;1", "rb");
+    if (!f) {
+        bgm_tid = -1;
+        ExitDeleteThread();
     }
 
-    audsrv_stop_audio();
+    fseek(f, 44, SEEK_SET); // Skip WAV header
+    char buf[4096];
+
+    while (bgm_running) {
+        int bytes_read = fread(buf, 1, sizeof(buf), f);
+        if (bytes_read <= 0) {
+            fseek(f, 44, SEEK_SET); // Loop
+            continue;
+        }
+
+        audsrv_wait_audio(bytes_read);
+        audsrv_play_audio(buf, bytes_read);
+    }
+
+    fclose(f);
     bgm_tid = -1;
     ExitDeleteThread();
 }
@@ -73,12 +84,16 @@ void plat_start_bgm(void) {
         StartThread(bgm_tid, NULL);
     } else {
         bgm_running = 0;
-        printf("BGM: Failed to create thread\n");
     }
 }
 
 void plat_stop_bgm(void) {
     bgm_running = 0;
+    // We wait briefly to let the thread exit gracefully
+    int timeout = 100;
+    while (bgm_tid != -1 && timeout-- > 0) {
+        usleep(1000);
+    }
 }
 
 static void reset_IOP() {
@@ -127,4 +142,134 @@ void plat_early_init(void) {
 #endif
 }
 
-/* ... Keep all your original functions (plat_get_ticks, ticks_us, ticks_ms, etc) here ... */
+/* base directory for configuration and save files */
+int plat_get_root_dir(char *dst, int len)
+{    
+    strcpy(dst, "mc0:/PICO/");
+    DIR *dir;
+    if ((dir = opendir(dst))) 
+        closedir(dir);
+    else
+        mkdir(dst,0777);
+
+    return strlen(dst);
+}
+
+/* base directory for emulator resources */
+int plat_get_skin_dir(char *dst, int len)
+{
+    if (len > 5)
+        strcpy(dst, "cdfs:/skin/");
+    else if (len > 0)
+        *dst = 0;
+    return strlen(dst);
+}
+
+/* top directory for rom images */
+int plat_get_data_dir(char *dst, int len)
+{
+    if (len > 5)
+        strcpy(dst, "cdfs:/ROMS/ROMS_GENS/");
+    else if (len > 0)
+        *dst = 0;
+    return strlen(dst);
+}
+
+/* check if path is a directory */
+int plat_is_dir(const char *path)
+{
+    DIR *dir;
+    if ((dir = opendir(path))) {
+        closedir(dir);
+        return 1;
+    }
+    return 0;
+}
+
+/* current time in ms */
+unsigned int plat_get_ticks_ms(void)
+{
+    return (unsigned int)(clock() / 1000);
+}
+
+/* current time in us */
+unsigned int plat_get_ticks_us(void)
+{
+    return (unsigned int)clock();
+}
+
+/* sleep for some time in us */
+void plat_wait_till_us(unsigned int us_to)
+{
+    unsigned int ticks = (unsigned int)clock();
+    if (us_to > ticks)
+        usleep(us_to - ticks);
+}
+
+/* sleep for some time in ms */
+void plat_sleep_ms(int ms)
+{
+    usleep(ms * 1000);
+}
+
+/* wait until some event occurs, or timeout */
+int plat_wait_event(int *fds_hnds, int count, int timeout_ms)
+{
+    return 0;    // unused
+}
+
+/* memory mapping functions */
+void *plat_mmap(unsigned long addr, size_t size, int need_exec, int is_fixed)
+{
+    return malloc(size);
+}
+
+void *plat_mremap(void *ptr, size_t oldsize, size_t newsize)
+{
+    return realloc(ptr, newsize);
+}
+
+void plat_munmap(void *ptr, size_t size)
+{
+    free(ptr);
+}
+
+void *plat_mem_get_for_drc(size_t size)
+{
+    return NULL;
+}
+
+int plat_mem_set_exec(void *ptr, size_t size)
+{
+    return 0;
+}
+
+int _flush_cache (char *addr, const int size, const int op)
+{ 
+    FlushCache(0); /* WRITEBACK_DCACHE */
+    FlushCache(2); /* INVALIDATE_ICACHE */
+    return 0;
+}
+
+int posix_memalign(void **p, size_t align, size_t size)
+{
+    if (p == NULL) return EINVAL;
+    *p = memalign(align, size);
+    return (*p ? 0 : ENOMEM);
+}
+
+/* lprintf */
+void lprintf(const char *fmt, ...)
+{
+    va_list vl;
+
+    va_start(vl, fmt);
+#if defined(LOG_TO_FILE)
+    vfprintf(logFile, fmt, vl);
+#else
+    vprintf(fmt, vl);
+#endif
+    va_end(vl);
+}
+
+void plat_debug_cat(char *str) {}
