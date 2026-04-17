@@ -42,24 +42,31 @@ static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    // Try Uppercase first (ISO standard)
-    FILE *f = fopen("cdfs:/MENU.WAV;1", "rb");
-    if (!f) f = fopen("cdfs:/menu.wav;1", "rb");
+    /* Removing "cdfs:/" allows the loader (OPL, uLaunchELF, etc.) 
+       to find the file in the same folder as the ELF.
+    */
+    FILE *f = fopen("menu.wav", "rb");
     
+    // Fallback to Uppercase if the first one fails
+    if (!f) f = fopen("MENU.WAV", "rb");
+    
+    // Fallback to ISO format if launched from a disc
+    if (!f) f = fopen("cdfs:/MENU.WAV;1", "rb");
+
     if (!f) {
-        printf("BGM: Could not open menu.wav\n");
+        printf("BGM: Could not open menu.wav from any location\n");
         bgm_tid = -1;
         ExitDeleteThread();
         return;
     }
 
     fseek(f, 44, SEEK_SET); 
-    static char audio_buf[8192]; // Larger buffer for stability
+    static char audio_buf[8192];
 
     while (bgm_running) {
         int bytes_read = fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET);
+            fseek(f, 44, SEEK_SET); // Loop back to start (after header)
             continue;
         }
 
