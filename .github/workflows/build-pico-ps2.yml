@@ -24,25 +24,27 @@ jobs:
 
     - name: Bundle IRX Drivers and Music
       run: |
-        # Identify the zip file
+        # Identify the zip file and folder name
         ZIP_FILE=$(ls PicoDrive_ps2_*.zip)
-        # Identify the folder name (everything before .zip)
         DIR_NAME="${ZIP_FILE%.zip}"
         
         # Unzip the existing artifact
         unzip "$ZIP_FILE"
         
-        # Create IRX folder and copy drivers
+        # 1. Create IRX folder and copy drivers
         mkdir -p "$DIR_NAME/irx"
         cp $PS2SDK/iop/irx/audsrv.irx "$DIR_NAME/irx/"
         cp $PS2SDK/iop/irx/libsd.irx "$DIR_NAME/irx/"
         
-        # Copy your music (assumes menu.wav is in repo root)
+        # 2. Copy the ELF file (The missing piece!)
+        cp PicoDrive.elf "$DIR_NAME/"
+        
+        # 3. Copy your music (assumes menu.wav is in repo root)
         if [ -f "menu.wav" ]; then
           cp menu.wav "$DIR_NAME/"
         fi
         
-        # Remove old zip and create new one
+        # Remove old zip and create new one containing the ELF and IRX/WAV
         rm "$ZIP_FILE"
         zip -r "$ZIP_FILE" "$DIR_NAME"
 
