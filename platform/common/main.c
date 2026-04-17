@@ -111,6 +111,7 @@ int main(int argc, char *argv[])
         }
         plat_video_menu_end();
     }
+    plat_video_menu_end(); // Fixed: change end to leave
     plat_video_menu_leave();
 
     for (;;)
