@@ -73,7 +73,9 @@ void parse_cmd_line(int argc, char *argv[])
 
 /* Add these lines right before the main() function */
 extern void plat_start_bgm(void);
-extern void plat_stop_bgm(void);
+
+// ... inside your main loop or init function ...
+plat_start_bgm();
 
 int main(int argc, char *argv[])
 {
@@ -90,6 +92,10 @@ int main(int argc, char *argv[])
 
 	plat_init();
 	menu_init();
+extern void plat_start_bgm(void);
+
+// ... inside your main loop or init function ...
+plat_start_bgm();
 
 	emu_prep_defconfig(); // depends on input
 	emu_read_config(NULL, 0);
