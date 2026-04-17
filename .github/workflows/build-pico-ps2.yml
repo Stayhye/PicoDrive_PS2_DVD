@@ -5,13 +5,22 @@ jobs:
   build-ps2:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev
+    
     steps:
+    
     - name: build environment
       run: |
         apk add build-base cmake git zip make
     - uses: actions/checkout@v4
       with:
         submodules: true
+        
+    - name: Prepare Embedded IRX
+      run: |
+        # Convert IRX binaries to C arrays
+        bin2c $PS2SDK/iop/irx/audsrv.irx audsrv_irx.c audsrv_irx
+        bin2c $PS2SDK/iop/irx/libsd.irx libsd_irx.c libsd_irx
+        
     - name: build
       run: |
         export CROSS_COMPILE=mips64r5900el-ps2-elf-
