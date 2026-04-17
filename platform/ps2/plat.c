@@ -23,8 +23,6 @@
 #include <ps2_joystick_driver.h>
 #include <ps2_audio_driver.h>
 #include <audsrv.h>
-
-/* For CDVD status and stopping */
 #include <libcdvd.h>
 
 /* Fix for the ALIGNED redefinition warning */
@@ -60,11 +58,9 @@ static void bgm_thread_func(void *arg) {
     }
 
     fseek(f, 44, SEEK_SET); 
-    /* Reduced buffer to 8KB to allow quicker exit signal checks */
     static char audio_buf[8192];
 
     while (bgm_running) {
-        /* Check if we need to stop before hitting the drive */
         if (!bgm_running) break;
 
         int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
@@ -73,11 +69,9 @@ static void bgm_thread_func(void *arg) {
             continue;
         }
 
-        /* Regulate speed */
         audsrv_wait_audio(bytes_read);
         audsrv_play_audio(audio_buf, bytes_read);
 
-        /* Minor yield */
         usleep(100);
     }
 
@@ -111,14 +105,12 @@ void plat_stop_bgm(void) {
     if (!bgm_running) return;
     bgm_running = 0;
     
-    /* Explicitly wait for the thread to close the file and exit */
     int timeout = 3000; 
     while (bgm_tid != -1 && timeout-- > 0) {
-        /* Use DelayThread for better kernel context switching */
         DelayThread(500);
     }
 
-    /* Force the CDVD drive to stop any pending seeks/reads */
+    /* Stop CDVD drive to prevent "Bad Sector" errors during ROM load */
     sceCdStop();
     sceCdSync(0);
 }
