@@ -21,153 +21,150 @@
 #include "version.h"
 #include <cpu/debug.h>
 
+/* Background Music Hooks */
+extern void plat_start_bgm(void);
+extern void plat_stop_bgm(void);
+
 static int load_state_slot = -1;
 char **g_argv;
 
 void parse_cmd_line(int argc, char *argv[])
 {
-	int x, unrecognized = 0;
+    int x, unrecognized = 0;
 
-	for (x = 1; x < argc && !unrecognized; x++)
-	{
-		if (argv[x][0] == '-')
-		{
-			if (strcasecmp(argv[x], "-config") == 0) {
-				if (x+1 < argc) { ++x; PicoConfigFile = argv[x]; }
-			}
-			else if (strcasecmp(argv[x], "-loadstate") == 0
-				 || strcasecmp(argv[x], "-load") == 0)
-			{
-				if (x+1 < argc) { ++x; load_state_slot = atoi(argv[x]); }
-			}
-			else if (strcasecmp(argv[x], "-pdb") == 0) {
-				if (x+1 < argc) { ++x; pdb_command(argv[x]); }
-			}
-			else if (strcasecmp(argv[x], "-pdb_connect") == 0) {
-				if (x+2 < argc) { pdb_net_connect(argv[x+1], argv[x+2]); x += 2; }
-			}
-			else {
-				unrecognized = plat_parse_arg(argc, argv, &x);
-			}
-		} else {
-			FILE *f = fopen(argv[x], "rb");
-			if (f) {
-				fclose(f);
-				rom_fname_reload = argv[x];
-			}
-			else
-				unrecognized = 1;
-			break;
-		}
-	}
+    for (x = 1; x < argc && !unrecognized; x++)
+    {
+        if (argv[x][0] == '-')
+        {
+            if (strcasecmp(argv[x], "-config") == 0) {
+                if (x+1 < argc) { ++x; PicoConfigFile = argv[x]; }
+            }
+            else if (strcasecmp(argv[x], "-loadstate") == 0
+                 || strcasecmp(argv[x], "-load") == 0)
+            {
+                if (x+1 < argc) { ++x; load_state_slot = atoi(argv[x]); }
+            }
+            else if (strcasecmp(argv[x], "-pdb") == 0) {
+                if (x+1 < argc) { ++x; pdb_command(argv[x]); }
+            }
+            else if (strcasecmp(argv[x], "-pdb_connect") == 0) {
+                if (x+2 < argc) { pdb_net_connect(argv[x+1], argv[x+2]); x += 2; }
+            }
+            else {
+                unrecognized = plat_parse_arg(argc, argv, &x);
+            }
+        } else {
+            FILE *f = fopen(argv[x], "rb");
+            if (f) {
+                fclose(f);
+                rom_fname_reload = argv[x];
+            }
+            else
+                unrecognized = 1;
+            break;
+        }
+    }
 
-	if (unrecognized) {
-		printf("\n\n\nPicoDrive v" VERSION " (c) notaz, 2006-2009,2013\n");
-		printf("usage: %s [options] [romfile]\n", argv[0]);
-		printf("options:\n"
-			" -config <file>    use specified config file instead of default 'config.cfg'\n"
-			" -loadstate <num>  if ROM is specified, try loading savestate slot <num>\n");
-		exit(1);
-	}
+    if (unrecognized) {
+        printf("\n\n\nPicoDrive v" VERSION " (c) notaz, 2006-2009,2013\n");
+        printf("usage: %s [options] [romfile]\n", argv[0]);
+        printf("options:\n"
+            " -config <file>    use specified config file instead of default 'config.cfg'\n"
+            " -loadstate <num>  if ROM is specified, try loading savestate slot <num>\n");
+        exit(1);
+    }
 }
-
-/* Add these lines right before the main() function */
-extern void plat_start_bgm(void);
-
-// ... inside your main loop or init function ...
-plat_start_bgm();
 
 int main(int argc, char *argv[])
 {
-	g_argv = argv;
+    g_argv = argv;
 
-	plat_early_init();
+    plat_early_init();
 
-	in_init();
-	//in_probe();
+    in_init();
+    //in_probe();
 
-	plat_target_init();
-	if (argc > 1)
-		parse_cmd_line(argc, argv);
+    plat_target_init();
+    if (argc > 1)
+        parse_cmd_line(argc, argv);
 
-	plat_init();
-	menu_init();
-extern void plat_start_bgm(void);
+    plat_init();
+    menu_init();
 
-// ... inside your main loop or init function ...
-plat_start_bgm();
+    /* Start the background music for the menu */
+    plat_start_bgm();
 
-	emu_prep_defconfig(); // depends on input
-	emu_read_config(NULL, 0);
+    emu_prep_defconfig(); // depends on input
+    emu_read_config(NULL, 0);
 
-	emu_init();
+    emu_init();
 
-	engineState = rom_fname_reload ? PGS_ReloadRom : PGS_Menu;
-	plat_video_menu_enter(0);
+    engineState = rom_fname_reload ? PGS_ReloadRom : PGS_Menu;
+    plat_video_menu_enter(0);
 
-	if (engineState == PGS_ReloadRom)
-	{
-		plat_video_menu_begin();
-		if (emu_reload_rom(rom_fname_reload)) {
-			engineState = PGS_Running;
-			if (load_state_slot >= 0) {
-				state_slot = load_state_slot;
-				emu_save_load_game(1, 0);
-			}
-		}
-		plat_video_menu_end();
-	}
-	plat_video_menu_leave();
+    if (engineState == PGS_ReloadRom)
+    {
+        plat_video_menu_begin();
+        if (emu_reload_rom(rom_fname_reload)) {
+            engineState = PGS_Running;
+            if (load_state_slot >= 0) {
+                state_slot = load_state_slot;
+                emu_save_load_game(1, 0);
+            }
+        }
+        plat_video_menu_end();
+    }
+    plat_video_menu_leave();
 
-	for (;;)
-	{
-		switch (engineState)
-		{
-			case PGS_Menu:
-				menu_loop();
-				break;
+    for (;;)
+    {
+        switch (engineState)
+        {
+            case PGS_Menu:
+                menu_loop();
+                break;
 
-			case PGS_TrayMenu:
-				menu_loop_tray();
-				break;
+            case PGS_TrayMenu:
+                menu_loop_tray();
+                break;
 
-			case PGS_ReloadRom:
-				if (emu_reload_rom(rom_fname_reload))
-					engineState = PGS_Running;
-				else {
-					printf("PGS_ReloadRom == 0\n");
-					engineState = PGS_Menu;
-				}
-				break;
+            case PGS_ReloadRom:
+                if (emu_reload_rom(rom_fname_reload))
+                    engineState = PGS_Running;
+                else {
+                    printf("PGS_ReloadRom == 0\n");
+                    engineState = PGS_Menu;
+                }
+                break;
 
-			case PGS_RestartRun:
-				engineState = PGS_Running;
-				/* vvv fallthrough */
+            case PGS_RestartRun:
+                engineState = PGS_Running;
+                /* vvv fallthrough */
 
-			case PGS_Running:
+            case PGS_Running:
 #ifdef GPERF
-	ProfilerStart("gperf.out");
+    ProfilerStart("gperf.out");
 #endif
-				emu_loop();
+                emu_loop();
 #ifdef GPERF
-	ProfilerStop();
+    ProfilerStop();
 #endif
-				break;
+                break;
 
-			case PGS_Quit:
-				goto endloop;
+            case PGS_Quit:
+                goto endloop;
 
-			default:
-				printf("engine got into unknown state (%i), exitting\n", engineState);
-				goto endloop;
-		}
-	}
+            default:
+                printf("engine got into unknown state (%i), exitting\n", engineState);
+                goto endloop;
+        }
+    }
 
-	endloop:
+    endloop:
 
-	emu_finish();
-	plat_finish();
-	plat_target_finish();
+    emu_finish();
+    plat_finish();
+    plat_target_finish();
 
-	return 0;
+    return 0;
 }
