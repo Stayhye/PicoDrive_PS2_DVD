@@ -1,6 +1,6 @@
 /*
  * PicoDrive platform interface for PS2
- * (Modified for Embedded IRX & Menu Music)
+ * (Modified for High Performance WAV Streaming)
  */
 
 #include <stdio.h>
@@ -36,37 +36,37 @@ extern void *_gp;
 
 static int bgm_running = 0;
 static int bgm_tid = -1;
-static unsigned char bgm_stack[0x2000] __attribute__((aligned(16)));
+static unsigned char bgm_stack[0x4000] __attribute__((aligned(16)));
 
 static int sound_rates[] = { 11025, 22050, 44100, -1 };
 struct plat_target plat_target = { .sound_rates = sound_rates };
 
 static void bgm_thread_func(void *arg) {
-    /* Removing "cdfs:/" allows the loader (OPL, uLaunchELF, etc.) 
-       to find the file in the same folder as the ELF.
-    */
     FILE *f = fopen("menu.wav", "rb");
-    
-    // Fallback to Uppercase if the first one fails
     if (!f) f = fopen("MENU.WAV", "rb");
-    
-    // Fallback to ISO format if launched from a disc
     if (!f) f = fopen("cdfs:/MENU.WAV;1", "rb");
-
+    
     if (!f) {
-        printf("BGM: Could not open menu.wav from any location\n");
         bgm_tid = -1;
         ExitDeleteThread();
         return;
     }
 
     fseek(f, 44, SEEK_SET); 
-    static char audio_buf[8192];
+    
+    /* 16KB buffer for smooth streaming */
+    static char audio_buf[16384];
 
     while (bgm_running) {
-        int bytes_read = fread(audio_buf, 1, sizeof(audio_buf), f);
+        /* If audsrv is too full, sleep briefly to save CPU for the loader */
+        if (audsrv_queued_remaining() > 32768) {
+            usleep(10000); 
+            continue;
+        }
+
+        int bytes_read = (int)fread(audio_buf, 1, sizeof(audio_buf), f);
         if (bytes_read <= 0) {
-            fseek(f, 44, SEEK_SET); // Loop back to start (after header)
+            fseek(f, 44, SEEK_SET); // Loop
             continue;
         }
 
@@ -89,7 +89,8 @@ void plat_start_bgm(void) {
     thread.func = (void *)bgm_thread_func;
     thread.stack = bgm_stack;
     thread.stack_size = sizeof(bgm_stack);
-    thread.initial_priority = 80;
+    /* Priority 100 (Lower priority than Main Menu) avoids slow loading */
+    thread.initial_priority = 100; 
     thread.gp_reg = &_gp;
 
     bgm_tid = CreateThread(&thread);
@@ -101,10 +102,13 @@ void plat_start_bgm(void) {
 }
 
 void plat_stop_bgm(void) {
+    if (!bgm_running) return;
     bgm_running = 0;
-    int timeout = 100;
+    
+    /* Wait for thread to exit so we don't have overlapping audio */
+    int timeout = 1000; 
     while (bgm_tid != -1 && timeout-- > 0) {
-        usleep(1000);
+        usleep(100);
     }
 }
 
@@ -140,7 +144,6 @@ void plat_early_init(void) {
     if (audsrv_init() != 0) {
         printf("audsrv: failed to initialize\n");
     } else {
-        // Set maximum volume for both channels
         audsrv_set_volume(MAX_VOLUME); 
     }
 }
@@ -191,9 +194,10 @@ int _flush_cache (char *addr, const int size, const int op) {
 }
 
 int posix_memalign(void **p, size_t align, size_t size) {
-    if (p == (void **)NULL) return EINVAL;
-    *p = memalign(align, size);
-    return (*p ? 0 : ENOMEM);
+    void *ptr = memalign(align, size);
+    if (!ptr) return ENOMEM;
+    *p = ptr;
+    return 0;
 }
 
 void lprintf(const char *fmt, ...) {
