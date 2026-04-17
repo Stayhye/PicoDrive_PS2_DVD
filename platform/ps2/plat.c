@@ -25,7 +25,7 @@
 #include <audsrv.h>
 #include <libcdvd.h>
 
-/* Fix for the ALIGNED redefinition warning */
+/* Kill the warning for ALIGNED by ensuring it is undefined before the port header */
 #ifdef ALIGNED
 #undef ALIGNED
 #endif
@@ -72,7 +72,7 @@ static void bgm_thread_func(void *arg) {
         audsrv_wait_audio(bytes_read);
         audsrv_play_audio(audio_buf, bytes_read);
 
-        /* Standard usleep for small thread yields */
+        /* Standard yield */
         usleep(100);
     }
 
@@ -108,8 +108,8 @@ void plat_stop_bgm(void) {
     
     int timeout = 3000; 
     while (bgm_tid != -1 && timeout-- > 0) {
-        /* Standard PS2SDK Delay call */
-        ee_delay_thread(500);
+        /* usleep is consistently supported in this toolchain environment */
+        usleep(500);
     }
 
     /* Stop CDVD drive to prevent "Bad Sector" errors during ROM load */
