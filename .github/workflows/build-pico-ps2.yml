@@ -19,16 +19,35 @@ jobs:
         ver=$(cut -d'"' -f2 platform/common/version.h)-$(git rev-parse --short HEAD)
         ./configure --platform=ps2
         make -j$(getconf _NPROCESSORS_ONLN)
+        # This creates the release directory
         make -C platform/ps2 rel VER=$ver
-    - name: Bundle IRX Drivers
+
+    - name: Bundle IRX Drivers and Music
       run: |
-        mkdir -p build/irx
-        cp $PS2SDK/iop/irx/audsrv.irx build/irx/
-        cp $PS2SDK/iop/irx/libsd.irx build/irx/
-       
+        # Find the release directory created by the previous step
+        # It usually looks like PicoDrive_ps2_vers
+        RELEASE_DIR=$(ls -d PicoDrive_ps2_*)
+        
+        # Create IRX folder inside the release directory
+        mkdir -p "$RELEASE_DIR/irx"
+        
+        # Copy drivers from the SDK
+        cp $PS2SDK/iop/irx/audsrv.irx "$RELEASE_DIR/irx/"
+        cp $PS2SDK/iop/irx/libsd.irx "$RELEASE_DIR/irx/"
+        
+        # Copy your menu music (ensure menu.mp3 is in your repo root)
+        # If it's in a folder like 'resources', change to cp resources/menu.mp3 ...
+        if [ -f "menu.mp3" ]; then
+          cp menu.mp3 "$RELEASE_DIR/"
+        else
+          echo "Warning: menu.mp3 not found in root, music will not play!"
+        fi
+        
+        # Re-zip the folder with the new files
+        zip -r "${RELEASE_DIR}.zip" "$RELEASE_DIR"
+
     - name: artifacts
       uses: actions/upload-artifact@v4
       with:
         name: PS2
         path: PicoDrive_ps2_*.zip
-
